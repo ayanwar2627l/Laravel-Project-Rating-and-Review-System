@@ -33,19 +33,28 @@
             <h1 class="text-3xl font-extrabold text-slate-900 mb-4 leading-tight">{{ $product->name }}</h1>
 
             <!-- Rating summary -->
-            <div class="flex items-center gap-3 mb-6">
-                <div class="flex items-center gap-1 text-amber-400 text-xl">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="flex items-center gap-0.5 text-amber-400 text-xl">
                     @for($i = 1; $i <= 5; $i++)
-                        @if($i <= floor($product->average_rating))
-                            <span>★</span>
-                        @else
-                            <span class="text-slate-200">★</span>
-                        @endif
+                        <span class="{{ $i <= floor($product->average_rating) ? 'text-amber-400' : 'text-slate-200' }}">★</span>
                     @endfor
                 </div>
                 <span class="text-slate-700 font-semibold">{{ number_format($product->average_rating, 1) }}</span>
                 <span class="text-slate-400 text-sm">{{ $product->review_count }} {{ Str::plural('review', $product->review_count) }}</span>
+                @php $verifiedCount = $reviews->where('is_verified', true)->count(); @endphp
+                @if($verifiedCount > 0)
+                    <span class="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                        ✓ {{ $verifiedCount }} verified
+                    </span>
+                @endif
             </div>
+
+            @if($hasPurchased)
+                <div class="inline-flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-medium px-3 py-1.5 rounded-lg mb-4 w-fit">
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                    You purchased this product — your review will be Verified
+                </div>
+            @endif
 
             <p class="text-slate-600 leading-relaxed mb-8">{{ $product->description }}</p>
 
@@ -89,16 +98,12 @@
 
                 <div class="text-center mb-6">
                     <div class="text-6xl font-extrabold text-indigo-700">{{ number_format($product->average_rating, 1) }}</div>
-                    <div class="flex justify-center gap-1 text-amber-400 text-xl mt-2">
+                    <div class="flex justify-center gap-0.5 text-amber-400 text-xl mt-2">
                         @for($i = 1; $i <= 5; $i++)
-                            @if($i <= round($product->average_rating))
-                                <span>★</span>
-                            @else
-                                <span class="text-slate-200">★</span>
-                            @endif
+                            <span class="{{ $i <= round($product->average_rating) ? 'text-amber-400' : 'text-slate-200' }}">★</span>
                         @endfor
                     </div>
-                    <p class="text-slate-400 text-sm mt-1">out of 5 stars</p>
+                    <p class="text-slate-400 text-sm mt-1">out of 5 · {{ $product->review_count }} {{ Str::plural('review', $product->review_count) }}</p>
                 </div>
 
                 <div class="space-y-2">
@@ -113,9 +118,20 @@
                             <div class="flex-1 bg-slate-100 rounded-full h-2">
                                 <div class="bg-amber-400 h-2 rounded-full transition-all" style="width: {{ $pct }}%"></div>
                             </div>
-                            <span class="text-slate-400 w-6 text-right">{{ $count }}</span>
+                            <span class="text-slate-400 w-6 text-right text-xs">{{ $count }}</span>
                         </div>
                     @endfor
+                </div>
+
+                <div class="mt-5 pt-5 border-t border-slate-100">
+                    @php $verifiedPct = $product->review_count > 0 ? round(($reviews->where('is_verified',true)->count() / $product->review_count) * 100) : 0; @endphp
+                    <div class="flex justify-between text-sm mb-1">
+                        <span class="text-slate-500">Verified Purchases</span>
+                        <span class="text-emerald-700 font-semibold">{{ $verifiedPct }}%</span>
+                    </div>
+                    <div class="bg-slate-100 rounded-full h-2">
+                        <div class="bg-emerald-500 h-2 rounded-full" style="width: {{ $verifiedPct }}%"></div>
+                    </div>
                 </div>
 
                 @auth
@@ -134,16 +150,33 @@
 
         <!-- Reviews list -->
         <div class="lg:col-span-2">
-            <h2 class="text-xl font-bold text-slate-800 mb-6">
-                Customer Reviews
-                <span class="text-slate-400 font-normal text-base ml-2">({{ $product->review_count }})</span>
-            </h2>
 
-            @forelse($product->reviews as $review)
-                <div class="bg-white rounded-2xl border border-slate-200 p-6 mb-4 shadow-sm">
+            <!-- Reviews header + sort -->
+            <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+                <h2 class="text-xl font-bold text-slate-800">
+                    Customer Reviews
+                    <span class="text-slate-400 font-normal text-base ml-2">({{ $product->review_count }})</span>
+                </h2>
+
+                <form method="GET" action="{{ route('products.show', $product) }}" class="flex items-center gap-2">
+                    <label class="text-sm text-slate-500 font-medium">Sort by:</label>
+                    <select name="review_sort" onchange="this.form.submit()"
+                            class="text-sm border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white text-slate-700">
+                        <option value="verified"  {{ $reviewSort === 'verified'  ? 'selected' : '' }}>✓ Verified first</option>
+                        <option value="newest"    {{ $reviewSort === 'newest'    ? 'selected' : '' }}>Newest first</option>
+                        <option value="highest"   {{ $reviewSort === 'highest'   ? 'selected' : '' }}>Highest rated</option>
+                        <option value="lowest"    {{ $reviewSort === 'lowest'    ? 'selected' : '' }}>Lowest rated</option>
+                    </select>
+                </form>
+            </div>
+
+            @forelse($reviews as $review)
+                <div class="bg-white rounded-2xl border border-slate-200 p-6 mb-4 shadow-sm
+                    {{ $review->is_verified ? 'border-l-4 border-l-emerald-400' : '' }}">
+
                     <div class="flex items-start justify-between mb-3">
                         <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center font-bold text-indigo-700 text-sm">
+                            <div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center font-bold text-indigo-700 text-sm flex-shrink-0">
                                 {{ strtoupper(substr($review->user->name, 0, 1)) }}
                             </div>
                             <div>
@@ -151,15 +184,20 @@
                                 <div class="text-xs text-slate-400">{{ $review->created_at->format('M j, Y') }}</div>
                             </div>
                         </div>
-                        <div class="flex items-center gap-2">
-                            <div class="flex text-amber-400">
+                        <div class="flex flex-col items-end gap-1.5">
+                            <div class="flex items-center gap-0.5 text-amber-400">
                                 @for($i = 1; $i <= 5; $i++)
-                                    <span class="{{ $i <= $review->rating ? 'text-amber-400' : 'text-slate-200' }}">★</span>
+                                    <span class="text-sm {{ $i <= $review->rating ? 'text-amber-400' : 'text-slate-200' }}">★</span>
                                 @endfor
                             </div>
                             @if($review->is_verified)
-                                <span class="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-medium">
-                                    ✓ Verified
+                                <span class="text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
+                                    <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                                    Verified Buyer
+                                </span>
+                            @else
+                                <span class="text-xs text-slate-400 border border-slate-200 px-2 py-0.5 rounded-full">
+                                    Unverified
                                 </span>
                             @endif
                         </div>
